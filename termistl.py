@@ -64,6 +64,15 @@ def rasterize_triangles_to_depth_buffer(
 class TermiSTLApp(App):
     CSS_PATH = "termistl.css"
     BINDINGS = [
+        ("f", "set_view('front')", "Front"),
+        ("t", "set_view('top')", "Top"),
+        ("s", "set_view('side')", "Side"),
+        ("up", "rotate_x(-0.1)", "Rot X-"),
+        ("down", "rotate_x(0.1)", "Rot X+"),
+        ("left", "rotate_y(-0.1)", "Rot Y-"),
+        ("right", "rotate_y(0.1)", "Rot Y+"),
+        ("u", "rotate_z(0.1)", "Roll CCW"),
+        ("o", "rotate_z(-0.1)", "Roll CW"),
         ("pageup", "adjust_zoom_level(1.2)", "Zoom In"),
         ("pagedown", "adjust_zoom_level(0.83333)", "Zoom Out"),
         ("q", "quit_application", "Quit"),
@@ -75,12 +84,27 @@ class TermiSTLApp(App):
         self.stl_mesh_data = None
         self.information_panel_text = "Loading STL file..."
         
-        self.camera_rotation_x_radians = np.deg2rad(-90) 
+        self.camera_rotation_x_radians = 0.0
         self.camera_rotation_y_radians = 0.0
         self.camera_rotation_z_radians = 0.0
         
         self.model_center_of_gravity = np.zeros(3)
         self.current_zoom_level = 1.0
+        self._apply_view_preset('front')
+
+    def _apply_view_preset(self, view: str):
+        if view == 'front':
+            self.camera_rotation_x_radians = np.deg2rad(-90)
+            self.camera_rotation_y_radians = 0.0
+            self.camera_rotation_z_radians = 0.0
+        elif view == 'top':
+            self.camera_rotation_x_radians = 0.0
+            self.camera_rotation_y_radians = 0.0
+            self.camera_rotation_z_radians = 0.0
+        elif view == 'side':
+            self.camera_rotation_x_radians = np.deg2rad(-90)
+            self.camera_rotation_y_radians = np.deg2rad(-90)
+            self.camera_rotation_z_radians = 0.0
 
     def compose(self) -> ComposeResult:
         yield Header("TermiSTL – ASCII Preview")
@@ -187,6 +211,22 @@ class TermiSTLApp(App):
 
     def action_adjust_zoom_level(self, zoom_factor: float):  
         self.current_zoom_level *= zoom_factor
+        self.update_ascii_preview()
+
+    def action_set_view(self, view: str):
+        self._apply_view_preset(view)
+        self.update_ascii_preview()
+
+    def action_rotate_x(self, delta_radians: float):
+        self.camera_rotation_x_radians += delta_radians
+        self.update_ascii_preview()
+
+    def action_rotate_y(self, delta_radians: float):
+        self.camera_rotation_y_radians += delta_radians
+        self.update_ascii_preview()
+
+    def action_rotate_z(self, delta_radians: float):
+        self.camera_rotation_z_radians += delta_radians
         self.update_ascii_preview()
         
     def action_quit_application(self):
