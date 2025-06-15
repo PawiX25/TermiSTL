@@ -7,6 +7,7 @@ from stl import mesh
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static
 from textual.containers import Container
+from textual.events import MouseDown, MouseMove, MouseUp
 
 from numba import njit, prange
 
@@ -92,6 +93,10 @@ class TermiSTLApp(App):
         self.current_zoom_level = 1.0
         self._apply_view_preset('front')
 
+        self.dragging = False
+        self.last_mouse_x = 0
+        self.last_mouse_y = 0
+
     def _apply_view_preset(self, view: str):
         if view == 'front':
             self.camera_rotation_x_radians = np.deg2rad(-90)
@@ -141,8 +146,10 @@ class TermiSTLApp(App):
         if not mesh_loaded_successfully:
             self.query_one("#stats", Static).update("[red]Error: Failed to load STL file.[/red]")
             return
-            
-        self.update_ascii_preview()
+        
+    async def on_ready(self) -> None:
+        if self.stl_mesh_data:
+            self.update_ascii_preview()
 
     def render_model_to_ascii(self, canvas_width: int, canvas_height: int) -> str:
         cos_rot_x, sin_rot_x = np.cos(self.camera_rotation_x_radians), np.sin(self.camera_rotation_x_radians)
@@ -231,6 +238,26 @@ class TermiSTLApp(App):
         
     def action_quit_application(self):
         self.exit()
+
+    def on_mouse_down(self, event: MouseDown) -> None:
+        if self.query_one("#preview", Static).region.contains(event.x, event.y):
+            self.dragging = True
+            self.last_mouse_x = event.x
+            self.last_mouse_y = event.y
+
+    def on_mouse_move(self, event: MouseMove) -> None:
+        if self.dragging:
+            delta_x = event.x - self.last_mouse_x
+            delta_y = event.y - self.last_mouse_y
+            self.last_mouse_x = event.x
+            self.last_mouse_y = event.y
+
+            self.camera_rotation_y_radians += delta_x * 0.01
+            self.camera_rotation_x_radians += delta_y * 0.01
+            self.update_ascii_preview()
+
+    def on_mouse_up(self, event: MouseUp) -> None:
+        self.dragging = False
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
