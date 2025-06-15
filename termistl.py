@@ -62,7 +62,7 @@ def rasterize_triangles_to_depth_buffer(
                         depth_buffer[y_pixel, x_pixel] = interpolated_z_at_pixel
     return depth_buffer
 
-class TermiSTLApp(App):
+class TermiSTL(App):
     CSS_PATH = "termistl.css"
     BINDINGS = [
         ("f", "set_view('front')", "Front"),
@@ -96,6 +96,7 @@ class TermiSTLApp(App):
         self.dragging = False
         self.last_mouse_x = 0
         self.last_mouse_y = 0
+        self._throttle_active = False
 
     def _apply_view_preset(self, view: str):
         if view == 'front':
@@ -216,25 +217,34 @@ class TermiSTLApp(App):
         if width > 1 and height > 1:
             preview_widget.update(self.render_model_to_ascii(width, height))
 
+    def request_throttled_update(self):
+        if not self._throttle_active:
+            self._throttle_active = True
+            self.set_timer(0.05, self._execute_update_and_reset_throttle)
+
+    def _execute_update_and_reset_throttle(self):
+        self.update_ascii_preview()
+        self._throttle_active = False
+
     def action_adjust_zoom_level(self, zoom_factor: float):  
         self.current_zoom_level *= zoom_factor
-        self.update_ascii_preview()
+        self.request_throttled_update()
 
     def action_set_view(self, view: str):
         self._apply_view_preset(view)
-        self.update_ascii_preview()
+        self.request_throttled_update()
 
     def action_rotate_x(self, delta_radians: float):
         self.camera_rotation_x_radians += delta_radians
-        self.update_ascii_preview()
+        self.request_throttled_update()
 
     def action_rotate_y(self, delta_radians: float):
         self.camera_rotation_y_radians += delta_radians
-        self.update_ascii_preview()
+        self.request_throttled_update()
 
     def action_rotate_z(self, delta_radians: float):
         self.camera_rotation_z_radians += delta_radians
-        self.update_ascii_preview()
+        self.request_throttled_update()
         
     def action_quit_application(self):
         self.exit()
@@ -254,7 +264,7 @@ class TermiSTLApp(App):
 
             self.camera_rotation_y_radians += delta_x * 0.01
             self.camera_rotation_x_radians += delta_y * 0.01
-            self.update_ascii_preview()
+            self.request_throttled_update()
 
     def on_mouse_up(self, event: MouseUp) -> None:
         self.dragging = False
@@ -269,5 +279,5 @@ if __name__ == "__main__":
         print(f"Error: File not found at '{input_file_path}'")
         sys.exit(1)
         
-    app = TermiSTLApp(input_file_path)
+    app = TermiSTL(input_file_path)
     app.run()
