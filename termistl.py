@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import os
+from typing import Iterable
 
 import numpy as np
 from stl import mesh
@@ -62,6 +63,14 @@ def rasterize_triangles_to_depth_buffer(
                     if interpolated_z_at_pixel > depth_buffer[y_pixel, x_pixel]:
                         depth_buffer[y_pixel, x_pixel] = interpolated_z_at_pixel
     return depth_buffer
+
+class FilteredDirectoryTree(DirectoryTree):
+    def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
+        filtered = []
+        for path_object in paths:
+            if path_object.is_dir() or path_object.suffix.lower() == ".stl":
+                filtered.append(path_object)
+        return filtered
 
 class TermiSTL(App):
     CSS_PATH = "termistl.css"
@@ -127,7 +136,7 @@ class TermiSTL(App):
     def compose(self) -> ComposeResult:
         yield Header("TermiSTL – ASCII Preview")
         with Horizontal(id="main-container"):
-            yield DirectoryTree("", id="file-explorer")
+            yield FilteredDirectoryTree("", id="file-explorer")
             with Container(id="app-grid"):
                 yield Static(self.information_panel_text, id="stats")
                 yield Static(id="preview")
@@ -148,7 +157,7 @@ class TermiSTL(App):
             self.stl_files_in_directory = []
             self.current_stl_index_in_dir = -1
         
-        dt_widget = self.query_one(DirectoryTree)
+        dt_widget = self.query_one(FilteredDirectoryTree)
         if scan_dir and Path(dt_widget.path) != scan_dir:
              dt_widget.path = str(scan_dir)
 
@@ -232,7 +241,7 @@ class TermiSTL(App):
         self.current_directory = initial_dir_for_explorer.resolve()
 
         try:
-            dt_widget = self.query_one(DirectoryTree)
+            dt_widget = self.query_one(FilteredDirectoryTree)
             dt_widget.path = str(self.current_directory)
             self.query_one("#preview", Static).can_focus = True
         except Exception as e:
@@ -429,7 +438,7 @@ class TermiSTL(App):
                         self.load_stl_file(self.stl_files_in_directory[new_index])
                     else: 
                         self.load_stl_file(None)
-                self.query_one(DirectoryTree).reload()
+                self.query_one(FilteredDirectoryTree).reload()
             except OSError as e:
                 self.notify(f"Error deleting file '{file_name}': {e}", severity="error")
             except Exception as e:
