@@ -381,20 +381,25 @@ class TermiSTL(App):
     def action_next_stl(self) -> None:
         self._clear_pending_deletion_confirmation()
         if not self.stl_files_in_directory:
-            self.notify("No STL files in the current directory.", severity="warning")
             return
         
-        self.current_stl_index_in_dir = (self.current_stl_index_in_dir + 1) % len(self.stl_files_in_directory)
+        num_files = len(self.stl_files_in_directory)
+        if num_files < 2:
+            return 
+        self.current_stl_index_in_dir = (self.current_stl_index_in_dir + 1) % num_files
         next_file_to_load = self.stl_files_in_directory[self.current_stl_index_in_dir]
         self.load_stl_file(next_file_to_load)
 
     def action_previous_stl(self) -> None:
         self._clear_pending_deletion_confirmation()
         if not self.stl_files_in_directory:
-            self.notify("No STL files in the current directory.", severity="warning")
             return
 
-        self.current_stl_index_in_dir = (self.current_stl_index_in_dir - 1 + len(self.stl_files_in_directory)) % len(self.stl_files_in_directory)
+        num_files = len(self.stl_files_in_directory)
+        if num_files < 2:
+            return
+
+        self.current_stl_index_in_dir = (self.current_stl_index_in_dir - 1 + num_files) % num_files
         prev_file_to_load = self.stl_files_in_directory[self.current_stl_index_in_dir]
         self.load_stl_file(prev_file_to_load)
 
