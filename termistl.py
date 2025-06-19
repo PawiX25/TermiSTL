@@ -104,7 +104,7 @@ class TermiSTL(App):
         self.stl_files_in_directory: list[Path] = []
         self.current_stl_index_in_dir: int = -1
 
-        self.auto_rotate = False
+        self.auto_rotate_mode = 0
         self.auto_rotate_timer = None
 
         self.camera_rotation_x_radians = 0.0
@@ -127,7 +127,7 @@ class TermiSTL(App):
         if self.auto_rotate_timer:
             self.auto_rotate_timer.stop()
             self.auto_rotate_timer = None
-            self.auto_rotate = False
+            self.auto_rotate_mode = 0
 
     def _apply_view_preset(self, view: str):
         if view == 'front':
@@ -399,12 +399,18 @@ class TermiSTL(App):
         self.request_throttled_update()
 
     def auto_rotate_step(self):
-        self.camera_rotation_y_radians += 0.01
+        if self.auto_rotate_mode == 1:
+            self.camera_rotation_y_radians += 0.01
+        elif self.auto_rotate_mode == 2:
+            self.camera_rotation_x_radians += 0.01
+        elif self.auto_rotate_mode == 3:
+            self.camera_rotation_y_radians += 0.01
+            self.camera_rotation_x_radians += 0.01
         self.request_throttled_update()
 
     def action_toggle_auto_rotation(self):
-        self.auto_rotate = not self.auto_rotate
-        if self.auto_rotate:
+        self.auto_rotate_mode = (self.auto_rotate_mode + 1) % 4
+        if self.auto_rotate_mode > 0:
             if self.auto_rotate_timer is None:
                 self.auto_rotate_timer = self.set_interval(1/60, self.auto_rotate_step)
         else:
