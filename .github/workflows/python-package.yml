@@ -8,7 +8,7 @@ on:
   push:
     branches: [ "main" ]
     tags:
-      - 'v*.*.*' 
+      - 'v*.*.*'
   pull_request:
     branches: [ "main" ]
 
@@ -39,11 +39,13 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Build package
+      if: matrix.python-version == '3.11'
       run: python -m build
     - name: Store the distribution files
+      if: matrix.python-version == '3.11'
       uses: actions/upload-artifact@v4
       with:
-        name: python-package-distributions-${{ matrix.python-version }}
+        name: python-package-distributions
         path: dist/
 
   release:
@@ -53,16 +55,15 @@ jobs:
       contents: write
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Download all the dists
+      - name: Download distribution files
         uses: actions/download-artifact@v4
         with:
-          pattern: python-package-distributions-*
-          path: dist/
-          merge-multiple: true
+          name: python-package-distributions
+          path: dist
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
             dist/*.tar.gz
-            dist/*.whl```
+            dist/*.whl
