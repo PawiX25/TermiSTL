@@ -517,7 +517,7 @@ class TermiSTL(App):
     def on_mouse_up(self, event: MouseUp) -> None:
         self.dragging = False
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) < 2:
         print("Usage: python termistl.py <path_to_model.stl_or_directory>")
         sys.exit(1)
@@ -529,3 +529,6 @@ if __name__ == "__main__":
         
     app = TermiSTL(input_path)
     app.run()
+
+if __name__ == "__main__":
+    main()

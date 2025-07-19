@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "termistl"
+version = "0.1.0"
+description = "ASCII STL file viewer in terminal"
+authors = [{name = "PawiX25"}]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "numpy-stl",
+    "textual",
+    "numba"
+]
+
+[project.scripts]
+termistl = "termistl:main"
+
+[tool.setuptools]
+py-modules = ["termistl"]
