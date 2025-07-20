@@ -15,6 +15,57 @@ from numba import njit, prange
 
 ASCII_SHADING_CHARACTERS = " ░▒▓█"
 
+@njit
+def draw_line(canvas, x0, y0, x1, y1, char_code):
+    x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
+    dx = abs(x1 - x0)
+    dy = -abs(y1 - y0)
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+    err = dx + dy
+    
+    height, width = canvas.shape
+    
+    while True:
+        if 0 <= y0 < height and 0 <= x0 < width:
+            canvas[y0, x0] = char_code
+        if x0 == x1 and y0 == y1:
+            break
+        e2 = 2 * err
+        if e2 >= dy:
+            err += dy
+            x0 += sx
+        if e2 <= dx:
+            err += dx
+            y0 += sy
+
+@njit(parallel=True)
+def render_wireframe(
+    triangles: np.ndarray,
+    canvas_width: int,
+    canvas_height: int,
+    model_min_coord_x: float,
+    model_min_coord_y: float,
+    model_scale_x: float,
+    model_scale_y: float,
+    model_offset_x: float,
+    model_offset_y: float
+) -> np.ndarray:
+    canvas = np.zeros((canvas_height, canvas_width), dtype=np.uint8)
+    
+    for i in prange(triangles.shape[0]):
+        tri = triangles[i]
+        
+        pixel_coords_x = (tri[:, 0] - model_min_coord_x) * model_scale_x + model_offset_x
+        pixel_coords_y = (tri[:, 1] - model_min_coord_y) * model_scale_y + model_offset_y
+        pixel_coords_y = (canvas_height - 1) - pixel_coords_y
+
+        draw_line(canvas, pixel_coords_x[0], pixel_coords_y[0], pixel_coords_x[1], pixel_coords_y[1], 1)
+        draw_line(canvas, pixel_coords_x[1], pixel_coords_y[1], pixel_coords_x[2], pixel_coords_y[2], 1)
+        draw_line(canvas, pixel_coords_x[2], pixel_coords_y[2], pixel_coords_x[0], pixel_coords_y[0], 1)
+        
+    return canvas
+
 @njit(parallel=True)
 def rasterize_triangles_to_depth_buffer(
     triangle_vertices_2d: np.ndarray,
@@ -89,6 +140,7 @@ class TermiSTL(App):
         ("a", "previous_stl", "Previous STL"),
         ("d", "next_stl", "Next STL"),
         ("r", "toggle_auto_rotation", "Rotate"),
+        ("w", "toggle_wireframe_mode", "Wireframe"),
         ("delete", "delete_current_stl", "Delete STL"),
         ("q", "quit_application", "Quit"),
     ]
@@ -106,6 +158,8 @@ class TermiSTL(App):
 
         self.auto_rotate_mode = 0
         self.auto_rotate_timer = None
+
+        self.wireframe_mode = False
 
         self.camera_rotation_x_radians = 0.0
         self.camera_rotation_y_radians = 0.0
@@ -308,7 +362,6 @@ class TermiSTL(App):
         rotated_mesh_triangles = centered_mesh_triangles @ combined_rotation_matrix.T
 
         projected_triangles_xy_coords = rotated_mesh_triangles[:, :, :2]
-        projected_triangles_z_values = rotated_mesh_triangles[:, :, 2]
 
         all_projected_xy_vertices = projected_triangles_xy_coords.reshape(-1, 2)
         overall_min_xy_projected = all_projected_xy_vertices.min(axis=0)
@@ -325,30 +378,42 @@ class TermiSTL(App):
         offset_x_to_center = (canvas_width - projected_xy_span[0] * uniform_scale_to_fit * CHARACTER_ASPECT_RATIO_CORRECTION) / 2
         offset_y_to_center = (canvas_height - projected_xy_span[1] * uniform_scale_to_fit) / 2
 
-        depth_buffer_result = rasterize_triangles_to_depth_buffer(
-            projected_triangles_xy_coords, projected_triangles_z_values, 
-            canvas_width, canvas_height,
-            overall_min_xy_projected[0], overall_min_xy_projected[1],
-            uniform_scale_to_fit * CHARACTER_ASPECT_RATIO_CORRECTION, uniform_scale_to_fit,
-            offset_x_to_center, offset_y_to_center
-        )
+        if self.wireframe_mode:
+            int_canvas = render_wireframe(
+                projected_triangles_xy_coords, 
+                canvas_width, canvas_height,
+                overall_min_xy_projected[0], overall_min_xy_projected[1],
+                uniform_scale_to_fit * CHARACTER_ASPECT_RATIO_CORRECTION, uniform_scale_to_fit,
+                offset_x_to_center, offset_y_to_center
+            )
+            output_ascii_canvas = np.full((canvas_height, canvas_width), ' ', dtype='<U1')
+            output_ascii_canvas[int_canvas != 0] = '█'
+        else:
+            projected_triangles_z_values = rotated_mesh_triangles[:, :, 2]
+            depth_buffer_result = rasterize_triangles_to_depth_buffer(
+                projected_triangles_xy_coords, projected_triangles_z_values, 
+                canvas_width, canvas_height,
+                overall_min_xy_projected[0], overall_min_xy_projected[1],
+                uniform_scale_to_fit * CHARACTER_ASPECT_RATIO_CORRECTION, uniform_scale_to_fit,
+                offset_x_to_center, offset_y_to_center
+            )
 
-        output_ascii_canvas = np.full((canvas_height, canvas_width), ' ', dtype='<U1')
-        pixels_with_depth_info_mask = depth_buffer_result > -1e19
-        
-        if pixels_with_depth_info_mask.any():
-            min_rendered_depth = depth_buffer_result[pixels_with_depth_info_mask].min()
-            max_rendered_depth = depth_buffer_result[pixels_with_depth_info_mask].max()
-            rendered_depth_range = max_rendered_depth - min_rendered_depth if max_rendered_depth > min_rendered_depth else 1.0
+            output_ascii_canvas = np.full((canvas_height, canvas_width), ' ', dtype='<U1')
+            pixels_with_depth_info_mask = depth_buffer_result > -1e19
             
-            available_shading_chars = np.array(list(ASCII_SHADING_CHARACTERS[1:]))
-            
-            for y_val in range(canvas_height):
-                for x_val in range(canvas_width):
-                    if pixels_with_depth_info_mask[y_val, x_val]:
-                        normalized_pixel_depth = (depth_buffer_result[y_val, x_val] - min_rendered_depth) / rendered_depth_range
-                        selected_shading_char_index = int(np.clip(normalized_pixel_depth * (available_shading_chars.size - 1), 0, available_shading_chars.size - 1))
-                        output_ascii_canvas[y_val, x_val] = available_shading_chars[selected_shading_char_index]
+            if pixels_with_depth_info_mask.any():
+                min_rendered_depth = depth_buffer_result[pixels_with_depth_info_mask].min()
+                max_rendered_depth = depth_buffer_result[pixels_with_depth_info_mask].max()
+                rendered_depth_range = max_rendered_depth - min_rendered_depth if max_rendered_depth > min_rendered_depth else 1.0
+                
+                available_shading_chars = np.array(list(ASCII_SHADING_CHARACTERS[1:]))
+                
+                for y_val in range(canvas_height):
+                    for x_val in range(canvas_width):
+                        if pixels_with_depth_info_mask[y_val, x_val]:
+                            normalized_pixel_depth = (depth_buffer_result[y_val, x_val] - min_rendered_depth) / rendered_depth_range
+                            selected_shading_char_index = int(np.clip(normalized_pixel_depth * (available_shading_chars.size - 1), 0, available_shading_chars.size - 1))
+                            output_ascii_canvas[y_val, x_val] = available_shading_chars[selected_shading_char_index]
                         
         return "\n".join("".join(row) for row in output_ascii_canvas)
 
@@ -417,6 +482,10 @@ class TermiSTL(App):
             if self.auto_rotate_timer:
                 self.auto_rotate_timer.stop()
                 self.auto_rotate_timer = None
+
+    def action_toggle_wireframe_mode(self):
+        self.wireframe_mode = not self.wireframe_mode
+        self.request_throttled_update()
         
     def action_quit_application(self):
         self.exit()
